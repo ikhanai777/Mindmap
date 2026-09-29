@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 
 export function createWorld(container) {
   // no preserveDrawingBuffer: it causes black frames on some GPUs (PNG export
@@ -32,18 +33,107 @@ export function createWorld(container) {
   controls.autoRotateSpeed = 0.35;
   controls.screenSpacePanning = true;
 
-  // multisampled target: post-processing bypasses the canvas's own antialiasing,
-  // and without MSAA the thin light fibres shimmer and flicker as they move
-  const msaa = renderer.capabilities.isWebGL2 ? (dpr > 1.5 ? 2 : 4) : 0;
-  const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: msaa });
-  const composer = new EffectComposer(renderer, target);
-  composer.setPixelRatio(dpr);
-  composer.setSize(container.clientWidth, container.clientHeight);
-  composer.addPass(new RenderPass(scene, camera));
-  // gentle, tight bloom: glow on the rims without smearing the whole frame
-  const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.7, 0.32, 0.28);
-  composer.addPass(bloom);
-  composer.addPass(new OutputPass());
+  // Post-processing pipeline. GPUs differ in what they can render into
+  // (multisampled half-float buffers in particular), and an unsupported
+  // combination silently draws nothing, so we pick what this GPU reports it
+  // supports, verify the framebuffer after the first frame, and step down:
+  //   MSAA half-float -> half-float + SMAA -> 8-bit + SMAA -> no post-processing.
+  const gl = renderer.getContext();
+  const isGL2 = renderer.capabilities.isWebGL2;
+  const floatOK = isGL2 && (renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'));
+  const wantSamples = dpr > 1.5 ? 2 : 4;
+  const maxSamplesFor = (internalFormat) => {
+    try {
+      const list = gl.getInternalformatParameter(gl.RENDERBUFFER, internalFormat, gl.SAMPLES);
+      return list && list.length ? Math.max(...list) : 0;
+    } catch {
+      return 0;
+    }
+  };
+  const candidates = [];
+  if (floatOK) {
+    const s16 = Math.min(wantSamples, maxSamplesFor(gl.RGBA16F));
+    if (s16 > 0) candidates.push({ type: THREE.HalfFloatType, samples: s16 });
+    candidates.push({ type: THREE.HalfFloatType, samples: 0 });
+  }
+  if (isGL2) {
+    const s8 = Math.min(wantSamples, maxSamplesFor(gl.RGBA8));
+    if (s8 > 0) candidates.push({ type: THREE.UnsignedByteType, samples: s8 });
+  }
+  candidates.push({ type: THREE.UnsignedByteType, samples: 0 });
+  candidates.push(null); // direct rendering, no bloom
+
+  let composer = null;
+  let bloom = null;
+  let target = null;
+  let mode = null;
+  let verified = 0; // frames checked with the current pipeline
+
+  function buildPipeline(i) {
+    composer?.dispose?.();
+    target?.dispose();
+    mode = candidates[i];
+    mode && (mode.index = i);
+    verified = 0;
+    if (!mode) {
+      composer = null;
+      bloom = null;
+      return;
+    }
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    target = new THREE.WebGLRenderTarget(1, 1, { type: mode.type, samples: mode.samples });
+    composer = new EffectComposer(renderer, target);
+    composer.setPixelRatio(dpr);
+    composer.setSize(w, h);
+    composer.addPass(new RenderPass(scene, camera));
+    // gentle, tight bloom: glow on the rims without smearing the whole frame
+    bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.7, 0.32, 0.28);
+    if (!floatOK) {
+      // bloom's own buffers default to half-float; use 8-bit where that isn't renderable
+      for (const rt of [bloom.renderTargetBright, ...bloom.renderTargetsHorizontal, ...bloom.renderTargetsVertical]) {
+        rt.texture.type = THREE.UnsignedByteType;
+      }
+    }
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+    // without MSAA the thin light fibres shimmer; SMAA smooths them instead
+    if (!mode.samples) composer.addPass(new SMAAPass());
+  }
+
+  // The sky is never pure black, so a frame whose sampled pixels are all
+  // exactly 0 means the pipeline produced nothing (e.g. an MSAA resolve that
+  // the driver accepted but didn't perform).
+  const probe = new Uint8Array(4);
+  function canvasHasImage() {
+    const w = gl.drawingBufferWidth;
+    const h = gl.drawingBufferHeight;
+    if (w < 2 || h < 2) return true; // nothing to judge yet
+    const prev = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    let lit = false;
+    for (const [fx, fy] of [[0.5, 0.5], [0.1, 0.1], [0.9, 0.9], [0.1, 0.9], [0.9, 0.1]]) {
+      gl.readPixels(Math.floor(w * fx), Math.floor(h * fy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+      if (probe[0] || probe[1] || probe[2]) lit = true;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, prev);
+    return lit;
+  }
+
+  function framebufferOK(rt) {
+    const props = renderer.properties.get(rt);
+    const fbs = [props.__webglMultisampledFramebuffer, props.__webglFramebuffer].filter(Boolean);
+    const prev = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    let ok = true;
+    for (const fb of fbs) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) ok = false;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, prev);
+    return ok;
+  }
+
+  buildPipeline(0);
 
   const backdrop = createBackdrop();
   scene.add(backdrop.group);
@@ -51,7 +141,20 @@ export function createWorld(container) {
   // labels are drawn after bloom so text stays crisp
   const labelScene = new THREE.Scene();
   function render() {
-    composer.render();
+    if (composer) {
+      composer.render();
+      if (verified < 3) {
+        verified++;
+        const ok = framebufferOK(composer.renderTarget1) && framebufferOK(composer.renderTarget2) && canvasHasImage();
+        if (!ok) {
+          console.warn('Mindverse: render mode unsupported, falling back', mode);
+          buildPipeline(mode.index + 1);
+          return render();
+        }
+      }
+    } else {
+      renderer.render(scene, camera);
+    }
     renderer.autoClear = false;
     renderer.clearDepth();
     renderer.render(labelScene, camera);
@@ -71,8 +174,8 @@ export function createWorld(container) {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
-    composer.setSize(w, h);
-    bloom.resolution.set(w, h);
+    composer?.setSize(w, h);
+    bloom?.resolution.set(w, h);
   }
   window.addEventListener('resize', resize);
   new ResizeObserver(resize).observe(container);
@@ -81,7 +184,9 @@ export function createWorld(container) {
   renderer.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
   renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
 
-  return { renderer, scene, labelScene, camera, controls, composer, bloom, backdrop, resize, render };
+  const world = { renderer, scene, labelScene, camera, controls, backdrop, resize, render };
+  Object.defineProperty(world, 'mode', { get: () => (mode ? `${mode.type === THREE.HalfFloatType ? 'hdr' : 'ldr'}${mode.samples ? ` msaa${mode.samples}` : ' smaa'}` : 'direct') });
+  return world;
 }
 
 function createBackdrop() {
