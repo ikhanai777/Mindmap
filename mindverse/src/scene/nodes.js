@@ -93,12 +93,17 @@ function wrap(ctx, text, maxWidth) {
   return lines;
 }
 
-export function drawLabel(canvas, text, color, { root = false, badge = '' } = {}) {
+// Labels are laid out in a 512 x LABEL_H logical box and rasterised at
+// `res` x that, so big bubbles get sharp text without every label costing
+// a large texture.
+export const LABEL_ASPECT = 0.62;
+export function drawLabel(canvas, text, color, { root = false, badge = '', res = 1 } = {}) {
   const W = 512;
-  const H = 512;
-  canvas.width = W;
-  canvas.height = H;
+  const H = Math.round(W * LABEL_ASPECT);
+  canvas.width = Math.round(W * res);
+  canvas.height = Math.round(H * res);
   const ctx = canvas.getContext('2d');
+  ctx.scale(res, res);
   ctx.clearRect(0, 0, W, H);
   const content = (root ? text.toUpperCase() : text) || ' ';
   const maxW = W * 0.8;
@@ -109,18 +114,22 @@ export function drawLabel(canvas, text, color, { root = false, badge = '' } = {}
     ctx.font = `${root ? 700 : 600} ${size}px Inter, "Segoe UI", system-ui, sans-serif`;
     lines = wrap(ctx, content, maxW);
     const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
-    if ((lines.length <= 3 && widest <= maxW && lines.length * size * 1.12 <= H * 0.62) || size <= 26) break;
+    if ((lines.length <= 3 && widest <= maxW && lines.length * size * 1.12 + (badge ? 70 : 0) <= H * 0.92) || size <= 26) break;
     size -= 4;
   }
   const lh = size * 1.12;
-  const top = H / 2 - ((lines.length - 1) * lh) / 2;
+  const top = H / 2 - ((lines.length - 1) * lh) / 2 - (badge ? 32 : 0);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowColor = color;
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = 10;
   ctx.fillStyle = '#f2f8ff';
   lines.forEach((l, i) => ctx.fillText(l, W / 2, top + i * lh));
   ctx.shadowBlur = 0;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(3, size * 0.07);
+  ctx.strokeStyle = 'rgba(2, 8, 20, 0.75)';
+  lines.forEach((l, i) => ctx.strokeText(l, W / 2, top + i * lh));
   ctx.fillStyle = '#ffffff';
   lines.forEach((l, i) => ctx.fillText(l, W / 2, top + i * lh));
   if (badge) {
@@ -173,7 +182,8 @@ export class NodeView {
     this.canvas = document.createElement('canvas');
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 4;
+    this.texture.anisotropy = 8;
+    this.texture.minFilter = THREE.LinearMipmapLinearFilter;
     this.label = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: this.texture, transparent: true, depthWrite: false, depthTest: false }),
     );
@@ -199,10 +209,18 @@ export class NodeView {
   }
 
   setLabel(text, color, opts) {
-    const key = `${text}|${color}|${opts.root}|${opts.badge}`;
+    // bigger bubbles are seen larger on screen, so rasterise their text finer
+    const res = opts.depth === 0 ? 2.5 : opts.depth === 1 ? 2 : 1.5;
+    const key = `${text}|${color}|${opts.root}|${opts.badge}|${res}`;
     if (key === this.labelKey) return;
     this.labelKey = key;
-    drawLabel(this.canvas, text, color, opts);
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    drawLabel(this.canvas, text, color, { ...opts, res });
+    if (w !== this.canvas.width || h !== this.canvas.height) {
+      // size changed: a texture can't be resized in place
+      this.texture.dispose();
+    }
     this.texture.needsUpdate = true;
   }
 
@@ -223,7 +241,7 @@ export class NodeView {
     this.body.scale.setScalar(s);
     this.uniforms.uScale.value = s;
     this.label.position.copy(this.current);
-    this.label.scale.setScalar(s * 1.9);
+    this.label.scale.set(s * 1.9, s * 1.9 * LABEL_ASPECT, 1);
     const glow = this.selected ? 1.9 : this.hover || this.dropTarget ? 1.5 : 1;
     this.uniforms.uGlow.value += ((this.dim ? 0.3 : glow) - this.uniforms.uGlow.value) * k;
     this.label.material.opacity = this.dim ? 0.35 : 1;

@@ -8,8 +8,11 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export function createWorld(container) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // no preserveDrawingBuffer: it causes black frames on some GPUs (PNG export
+  // renders and reads back in the same task instead)
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(dpr);
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.toneMapping = THREE.NoToneMapping;
   container.appendChild(renderer.domElement);
@@ -29,9 +32,16 @@ export function createWorld(container) {
   controls.autoRotateSpeed = 0.35;
   controls.screenSpacePanning = true;
 
-  const composer = new EffectComposer(renderer);
+  // multisampled target: post-processing bypasses the canvas's own antialiasing,
+  // and without MSAA the thin light fibres shimmer and flicker as they move
+  const msaa = renderer.capabilities.isWebGL2 ? (dpr > 1.5 ? 2 : 4) : 0;
+  const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: msaa });
+  const composer = new EffectComposer(renderer, target);
+  composer.setPixelRatio(dpr);
+  composer.setSize(container.clientWidth, container.clientHeight);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.95, 0.5, 0.2);
+  // gentle, tight bloom: glow on the rims without smearing the whole frame
+  const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.7, 0.32, 0.28);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
@@ -48,9 +58,16 @@ export function createWorld(container) {
     renderer.autoClear = true;
   }
 
+  let lastW = 0;
+  let lastH = 0;
   function resize() {
     const w = container.clientWidth;
     const h = container.clientHeight;
+    // skip no-op resizes (mobile toolbars fire these constantly; reallocating
+    // the render targets each time shows up as black flashes)
+    if (!w || !h || (w === lastW && h === lastH)) return;
+    lastW = w;
+    lastH = h;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
@@ -58,6 +75,11 @@ export function createWorld(container) {
     bloom.resolution.set(w, h);
   }
   window.addEventListener('resize', resize);
+  new ResizeObserver(resize).observe(container);
+
+  // if the GPU drops the context (driver reset, memory pressure), recover
+  renderer.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
+  renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
 
   return { renderer, scene, labelScene, camera, controls, composer, bloom, backdrop, resize, render };
 }

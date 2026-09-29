@@ -54,7 +54,7 @@ export class MindScene {
       if (instant) view.current.copy(view.target);
       view.setColor(color);
       const hidden = n.collapsed ? descendants(map, id).length : 0;
-      view.setLabel(n.title, color, { root: id === map.rootId, badge: hidden ? `+${hidden}` : '' });
+      view.setLabel(n.title, color, { root: id === map.rootId, badge: hidden ? `+${hidden}` : '', depth });
     }
     // edges
     const wanted = new Set();
