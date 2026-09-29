@@ -211,3 +211,4 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.maps-list .icon-btn.armed { width: auto; padding: 0 10px; color: var(--danger); border-color: var(--danger); font-size: 12px; font-weight: 600; }

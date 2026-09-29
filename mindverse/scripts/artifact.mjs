@@ -17,5 +17,10 @@ for (const f of readdirSync(assets)) {
   }
 }
 html = html.replace(/<link rel="modulepreload"[^>]*>/g, '');
+// the artifact host supplies its own document skeleton: keep head + body contents only
+const head = html.match(/<head>([\s\S]*?)<\/head>/)[1].replace(/<meta (charset|name="viewport")[^>]*>\s*/g, '');
+const body = html.match(/<body>([\s\S]*)<\/body>/)[1];
+const fragment = head.trim() + '\n' + body.trim() + '\n';
+writeFileSync(new URL('mindverse.artifact.html', dir), fragment);
 writeFileSync(new URL('mindverse.html', dir), html);
 console.log('dist-artifact/mindverse.html', (html.length / 1024).toFixed(0), 'KB');

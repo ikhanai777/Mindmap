@@ -665,7 +665,17 @@ function showMaps() {
     if (del) {
       e.stopPropagation();
       const id = del.dataset.del;
-      if (!confirm('Delete this map? This can’t be undone.')) return;
+      // two-step confirm inside the page (native dialogs are blocked in some embeds)
+      if (!del.classList.contains('armed')) {
+        del.classList.add('armed');
+        del.textContent = 'Delete?';
+        del.title = 'Click again to delete this map for good';
+        setTimeout(() => {
+          del.classList.remove('armed');
+          del.textContent = '✕';
+        }, 3000);
+        return;
+      }
       deleteMap(id);
       if (id === map.id) {
         const next = listMaps()[0];
