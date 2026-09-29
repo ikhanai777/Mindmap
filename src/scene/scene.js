@@ -17,7 +17,7 @@ import { FatLines } from './fatlines.js';
 const LAYOUT_MS = 800;
 const SPAWN_MS = 250;
 const LOD_POINT_DIST = 60;
-const LABEL_DIST = 25;
+const LABEL_DIST = 45;
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -109,6 +109,7 @@ export class Scene3D {
     this.icons = new Map();
     this.notes = new Map();
     this.labelSet = new Set();
+    this.labelScene = new THREE.Scene(); // drawn after post-processing: crisp, never bloomed
 
     // nebulae
     this.nebulaTex = radialTexture(256, 0, 1.6);
@@ -193,9 +194,11 @@ export class Scene3D {
   }
 
   #buildPost() {
-    this.composer = new EffectComposer(this.renderer);
+    // multisampled target: without it the post-processing path loses antialiasing and looks soft
+    const rt = new THREE.WebGLRenderTarget(1, 1, { samples: 4, type: THREE.HalfFloatType });
+    this.composer = new EffectComposer(this.renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.85, 0.55, 0.12);
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.2, 0.82); // only the brightest cores glow
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
   }
@@ -337,15 +340,15 @@ export class Scene3D {
         t.anchorX = 'center';
         t.anchorY = 'middle';
         t.renderOrder = 9;
-        t.material.depthWrite = false;
+        t.material = this.#labelMaterial();
         this.#styleLabel(t, true);
-        this.scene.add(t);
+        this.labelScene.add(t);
         this.linkLabels.set(l.id, t);
       }
       if (t.text !== l.label) { t.text = l.label; t.sync(); }
     }
     for (const [id, t] of this.linkLabels) {
-      if (!keep.has(id)) { this.scene.remove(t); t.dispose(); this.linkLabels.delete(id); }
+      if (!keep.has(id)) { this.labelScene.remove(t); t.dispose(); this.linkLabels.delete(id); }
     }
   }
 
@@ -544,13 +547,20 @@ export class Scene3D {
   }
 
   // ---------- labels ----------
+  #labelMaterial() {
+    // no fog (it washed labels out) and no depth test so orbs never cover text
+    return new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthTest: false, fog: false, toneMapped: false });
+  }
+
   #styleLabel(t, small = false) {
     const theme = this.themeRef || themeOf(null);
     const hc = theme === themeOf({ theme: 'contrast' });
     t.color = theme.text;
     t.outlineColor = theme.textOutline;
-    t.outlineWidth = hc ? '14%' : '9%';
-    t.outlineOpacity = 0.85;
+    t.outlineWidth = hc ? '18%' : '14%';
+    t.outlineBlur = '4%';
+    t.outlineOpacity = 1;
+    t.sdfGlyphSize = 128;
     if (!small) t.fontWeight = 'normal';
   }
 
@@ -564,10 +574,10 @@ export class Scene3D {
       t.textAlign = 'center';
       t.maxWidth = 6;
       t.renderOrder = 10;
-      t.material.depthWrite = false;
+      t.material = this.#labelMaterial();
       t.visible = false;
       this.#styleLabel(t);
-      this.scene.add(t);
+      this.labelScene.add(t);
       this.labels.set(id, t);
     }
     return t;
@@ -576,7 +586,7 @@ export class Scene3D {
   #dropLabel(id) {
     for (const map of [this.labels, this.notes]) {
       const t = map.get(id);
-      if (t) { this.scene.remove(t); t.dispose(); map.delete(id); }
+      if (t) { this.labelScene.remove(t); t.dispose(); map.delete(id); }
     }
     const icon = this.icons.get(id);
     if (icon) { this.scene.remove(icon); icon.material.dispose(); this.icons.delete(id); }
@@ -594,7 +604,7 @@ export class Scene3D {
     const s = store.getState();
     const cam = this.camera.position;
     const walk = s.mode === 'walk';
-    const budget = this.quality >= 3 ? 50 : this.lowEnd ? 120 : 220;
+    const budget = this.quality >= 3 ? 40 : this.lowEnd ? 80 : 140;
     const must = new Set([...s.selection, s.focusId, s.linkFrom].filter(Boolean));
     if (this.litSet) for (const id of this.litSet) must.add(id);
     const cands = [];
@@ -604,7 +614,7 @@ export class Scene3D {
       const limit = walk && st.depth >= 2 ? 5 : LABEL_DIST;
       if (d > limit && !must.has(id)) continue;
       if (s.highlight && !s.highlight.has(id) && !must.has(id)) continue;
-      cands.push([id, must.has(id) ? -1 : d]);
+      cands.push([id, must.has(id) ? -1 : d + Math.min(st.depth, 4) * 8]); // branches outrank leaves
     }
     cands.sort((a, b) => a[1] - b[1]);
     this.labelSet = new Set(cands.slice(0, budget).map((c) => c[0]));
@@ -616,6 +626,8 @@ export class Scene3D {
     const camUp = _v2.set(0, 1, 0).applyQuaternion(cam.quaternion);
     const scale = s.settings.labelScale * (this.themeRef?.flat > 0.5 && this.themeRef?.name === 'High Contrast' ? 1.2 : 1);
     const walk = s.mode === 'walk';
+    const focal = this.height / 2 / Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const placed = []; // screen rects of labels already shown (priority order)
     for (const [id, t] of this.labels) if (!this.labelSet.has(id)) t.visible = false;
     for (const [id, t] of this.notes) if (!this.labelSet.has(id) || !walk) t.visible = false;
     for (const id of this.labelSet) {
@@ -623,7 +635,7 @@ export class Scene3D {
       if (!st) continue;
       const t = this.#labelFor(id);
       const text = this.#labelText(st);
-      const fs = 0.3 * scale * Math.pow(st.scale, 0.35);
+      const fs = 0.34 * scale * Math.pow(st.scale, 0.3);
       if (t.text !== text || t.fontSize !== fs) {
         t.text = text;
         t.fontSize = fs;
@@ -632,15 +644,34 @@ export class Scene3D {
       }
       const p = this.getPos(id);
       const d = p.distanceTo(cam.position);
+      // keep text a readable size on screen as it recedes (up to 1.8x)
+      t.scale.setScalar(Math.min(1.8, Math.max(1, d / 16)));
       const limit = walk && st.depth >= 2 ? 5 : LABEL_DIST;
-      const fade = d < limit * 0.72 ? 1 : Math.max(0, 1 - (d - limit * 0.72) / (limit * 0.28));
+      const fade = d < limit * 0.75 ? 1 : Math.max(0, 1 - (d - limit * 0.75) / (limit * 0.25));
       const must = s.selection.includes(id) || (this.litSet && this.litSet.has(id));
       const op = (must ? 1 : fade) * Math.min(1, st.opacity * 1.2);
       t.visible = op > 0.02;
       t.fillOpacity = op;
-      t.outlineOpacity = op * 0.85;
-      t.position.copy(p).addScaledVector(camUp, st.radius * (st.node.shape === 'ring' ? 1.1 : 1) + 0.12);
+      t.outlineOpacity = op;
+      t.position.copy(p).addScaledVector(camUp, st.radius * (st.node.shape === 'ring' ? 1.1 : 1) + 0.12 * t.scale.x);
       t.quaternion.copy(cam.quaternion);
+
+      // declutter: skip a label whose box would overlap one already shown
+      if (t.visible) {
+        _v.copy(t.position).applyMatrix4(cam.matrixWorldInverse);
+        const depth = -_v.z;
+        if (depth > cam.near) {
+          const ppu = focal / depth;
+          const bounds = t.textRenderInfo?.blockBounds;
+          const w = (bounds ? bounds[2] - bounds[0] : text.length * fs * 0.55) * t.scale.x * ppu;
+          const hgt = (bounds ? bounds[3] - bounds[1] : fs * 1.2) * t.scale.x * ppu;
+          const sp = this.toScreen(t.position);
+          const r = { x0: sp.x - w / 2 - 4, x1: sp.x + w / 2 + 4, y0: sp.y - hgt - 2, y1: sp.y + 2 };
+          const hit = placed.some((q) => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0);
+          if (hit && !s.selection.includes(id)) t.visible = false;
+          else placed.push(r);
+        }
+      }
 
       // proximity note reveal while walking
       if (walk && st.node.note && d < 5) {
@@ -652,9 +683,9 @@ export class Scene3D {
           nt.anchorY = 'top';
           nt.maxWidth = 3.2;
           nt.renderOrder = 10;
-          nt.material.depthWrite = false;
+          nt.material = this.#labelMaterial();
           this.#styleLabel(nt, true);
-          this.scene.add(nt);
+          this.labelScene.add(nt);
           this.notes.set(id, nt);
         }
         const snippet = st.node.note.replace(/[#*_>`]|\[[ xX]\]/g, '').trim().slice(0, 160);
@@ -997,6 +1028,11 @@ export class Scene3D {
       this.bloomPass.strength = this.themeRef.bloom;
       this.composer.render();
     } else this.renderer.render(this.scene, this.camera);
+    // labels on top, after bloom, so text stays sharp
+    const r = this.renderer;
+    r.autoClear = false;
+    r.render(this.labelScene, this.camera);
+    r.autoClear = true;
     this.#trackFps();
   }
 

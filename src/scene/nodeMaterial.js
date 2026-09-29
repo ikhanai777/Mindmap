@@ -43,8 +43,13 @@ export function createNodeMaterial() {
         float rim = pow(1.0 - facing, 2.2);
         float core = pow(facing, 2.5);
         float b = vState.x;
-        vec3 glass = vColor * (0.18 + 0.35 * b) + vColor * core * (0.35 + 0.65 * b) + mix(vColor, vec3(1.0), 0.35) * rim * 1.15;
-        float glassAlpha = 0.78 + 0.22 * rim;
+        // solid, defined orb: lit body + soft specular + a thin rim (no haze)
+        float light = max(dot(n, normalize(vec3(0.35, 0.8, 0.55))), 0.0);
+        float spec = pow(max(dot(reflect(-normalize(vec3(0.35, 0.8, 0.55)), n), normalize(vViewDir)), 0.0), 24.0);
+        vec3 glass = vColor * (0.32 + 0.38 * light + 0.18 * core) * (0.75 + 0.35 * b)
+                   + vec3(1.0) * spec * 0.35
+                   + mix(vColor, vec3(1.0), 0.5) * smoothstep(0.55, 1.0, rim) * 0.45;
+        float glassAlpha = 0.97;
         float lambert = 0.62 + 0.38 * max(dot(n, normalize(vec3(0.35, 0.85, 0.5))), 0.0);
         vec3 flatCol = vColor * lambert * (0.8 + 0.2 * b);
         flatCol = mix(flatCol, vColor * 0.55, smoothstep(0.55, 0.9, rim) * 0.6); // ink-like edge
