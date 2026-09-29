@@ -1,0 +1,21 @@
+{
+  "name": "mindverse",
+  "version": "0.1.0",
+  "description": "Mindverse — an interactive 3D neon mind map built on Three.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "test": "vitest run",
+    "build:artifact": "vite build --mode artifact && node scripts/artifact.mjs"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

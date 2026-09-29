@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#03060f" />
+    <meta name="description" content="Mindverse — an interactive 3D neon mind map" />
+    <title>Mindverse</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='14' fill='none' stroke='%2329e0d8' stroke-width='4'/%3E%3Ccircle cx='10' cy='14' r='6' fill='none' stroke='%233ea8ff' stroke-width='3'/%3E%3Ccircle cx='54' cy='16' r='6' fill='none' stroke='%2339e36b' stroke-width='3'/%3E%3Ccircle cx='50' cy='52' r='6' fill='none' stroke='%23c45cff' stroke-width='3'/%3E%3Ccircle cx='14' cy='50' r='6' fill='none' stroke='%23ffc53d' stroke-width='3'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@600;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-orb"></span>
+        <span class="brand-name">MINDVERSE</span>
+      </div>
+      <input id="map-title" class="map-title" spellcheck="false" aria-label="Map title" />
+
+      <div class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input id="search" placeholder="Search ideas…  ( / )" autocomplete="off" aria-label="Search nodes" />
+        <ul id="search-results" class="search-results" hidden></ul>
+      </div>
+
+      <nav class="toolbar" aria-label="Tools">
+        <button data-act="maps" title="My maps"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="2" /><rect x="14" y="4" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></svg></button>
+        <span class="sep"></span>
+        <button data-act="undo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg></button>
+        <button data-act="redo" title="Redo (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg></button>
+        <span class="sep"></span>
+        <button data-act="arrange" title="Auto-arrange (L)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><circle cx="4" cy="5" r="2" /><circle cx="20" cy="5" r="2" /><circle cx="4" cy="19" r="2" /><circle cx="20" cy="19" r="2" /><path d="M6 6.5 9.5 10M18 6.5 14.5 10M6 17.5l3.5-3.5M18 17.5 14.5 14" /></svg></button>
+        <button data-act="fit" title="Fit view (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg></button>
+        <button data-act="rotate" title="Auto-rotate (R)"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" /></svg></button>
+        <button data-act="scenery" title="Toggle city & grid scenery"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V10h4v11M10 21V4h5v17M16 21v-8h3v8" /></svg></button>
+        <span class="sep"></span>
+        <button data-act="import" title="Import"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg></button>
+        <button data-act="export" title="Export"><svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 21h16" /></svg></button>
+        <button data-act="help" title="Help (?)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01" /></svg></button>
+      </nav>
+    </header>
+
+    <div id="export-menu" class="popover" hidden>
+      <button data-export="png">Snapshot image (.png)</button>
+      <button data-export="json">Map file (.json)</button>
+      <button data-export="md">Outline (.md)</button>
+      <button data-export="copy">Copy outline</button>
+    </div>
+
+    <!-- quick actions that float next to the selected bubble -->
+    <div id="quick" class="quick" hidden>
+      <button data-q="child" title="Add child (Tab)">+</button>
+      <button data-q="sibling" title="Add sibling (Enter)">⇵</button>
+      <button data-q="rename" title="Rename (F2)">✎</button>
+      <button data-q="collapse" title="Collapse / expand (Space)">◎</button>
+      <button data-q="focus" title="Focus (F)">⌖</button>
+      <button data-q="delete" class="danger" title="Delete (Del)">✕</button>
+    </div>
+
+    <input id="rename" class="rename" hidden spellcheck="false" />
+
+    <aside id="inspector" class="inspector" hidden>
+      <div class="insp-head">
+        <span id="insp-dot" class="dot"></span>
+        <span id="insp-path" class="insp-path"></span>
+        <button id="insp-close" class="icon-btn" title="Close">✕</button>
+      </div>
+      <label class="field">
+        <span>Idea</span>
+        <input id="insp-title" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span>Notes</span>
+        <textarea id="insp-note" rows="5" placeholder="Details, links, next steps…"></textarea>
+      </label>
+      <div class="field">
+        <span>Glow colour</span>
+        <div id="insp-colors" class="swatches"></div>
+      </div>
+      <div class="insp-stats" id="insp-stats"></div>
+      <div class="insp-actions">
+        <button data-q="child">+ Child</button>
+        <button data-q="sibling">+ Sibling</button>
+        <button data-q="collapse" id="insp-collapse">Collapse</button>
+        <button data-q="arrange-branch">Arrange branch</button>
+        <button data-q="focus">Focus</button>
+        <button data-q="delete" class="danger">Delete</button>
+      </div>
+    </aside>
+
+    <footer class="statusbar">
+      <span id="stats"></span>
+      <span class="hint" id="hint">Drag to orbit · Scroll to zoom · Right-drag to pan · Double-click a bubble to rename · Drag a bubble to move it, drop it on another to re-parent</span>
+    </footer>
+
+    <div id="modal" class="modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <button class="icon-btn modal-close" data-close title="Close">✕</button>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <input type="file" id="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" hidden />
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
