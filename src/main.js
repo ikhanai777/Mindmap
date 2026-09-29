@@ -95,7 +95,7 @@ async function boot() {
   if (firstRun) setTimeout(() => app.onboarding.start(), 900);
   if (settings.gyro) rig.enableGyro(true);
 
-  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  if (import.meta.env.PROD && import.meta.env.MODE !== 'artifact' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
   document.body.classList.add('ready');
@@ -134,9 +134,9 @@ function onStoreChange(s, prev) {
 
 function applyThemeChrome() {
   const theme = get().doc?.theme || 'void';
-  if (document.documentElement.dataset.theme === theme) return;
-  document.documentElement.dataset.theme = theme;
-  $('meta[name=theme-color]').setAttribute('content', THEMES[theme]?.bg[1] || '#07080d');
+  if (document.documentElement.dataset.mapTheme === theme) return;
+  document.documentElement.dataset.mapTheme = theme;
+  $('meta[name=theme-color]')?.setAttribute('content', THEMES[theme]?.bg[1] || '#07080d');
 }
 
 // ---------- documents ----------
@@ -381,6 +381,7 @@ function initChrome() {
   ['pointerdown', 'keydown', 'wheel'].forEach((ev) => window.addEventListener(ev, app.activity, { passive: true }));
   app.activity();
   $('#btn-recenter').addEventListener('click', () => app.recenter());
+  $('#export-close').addEventListener('click', () => { $('#export-panel').hidden = true; });
   $('#btn-search').addEventListener('click', () => app.search.open());
   $('#btn-menu').addEventListener('click', () => app.menu.open());
   $('#sr-outline-link').addEventListener('click', (e) => { e.preventDefault(); app.outline.open(); });

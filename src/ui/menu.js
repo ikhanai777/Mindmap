@@ -168,9 +168,7 @@ export function initMenu(app) {
   }
 
   async function pasteBranch() {
-    let text = '';
-    try { text = await navigator.clipboard.readText(); } catch { /* permission denied */ }
-    if (!text) text = await prompt('Paste a bulleted or markdown list', '', { placeholder: '- idea\n  - sub-idea' });
+    const text = await prompt('Paste a bulleted or markdown list', '', { placeholder: '- idea\n  - sub-idea', multiline: true, ok: 'Add branch' });
     if (!text) return;
     close();
     app.pasteOutline(text);

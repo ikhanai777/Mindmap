@@ -122,6 +122,15 @@
     <div id="menu-body"></div>
   </section>
 
+  <section id="export-panel" class="panel" hidden aria-label="Export">
+    <header class="panel-head">
+      <strong>Export</strong>
+      <span class="muted small" id="export-name"></span>
+      <button class="icon-btn" id="export-close" aria-label="Close export"><svg><use href="#i-close" /></svg></button>
+    </header>
+    <div id="export-body"></div>
+  </section>
+
   <!-- radial menu, popovers, dialogs, toasts -->
   <div id="radial" hidden role="menu" aria-label="Idea actions"></div>
   <div id="popover" hidden></div>
@@ -129,6 +138,7 @@
     <form id="dialog" method="dialog">
       <label id="dialog-label" for="dialog-input"></label>
       <input id="dialog-input" autocomplete="off" />
+      <textarea id="dialog-textarea" hidden></textarea>
       <div class="dialog-actions">
         <button type="button" id="dialog-cancel">Cancel</button>
         <button type="submit" id="dialog-ok" class="primary">OK</button>

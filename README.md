@@ -11,6 +11,7 @@ npm install
 npm run dev        # http://localhost:5173 (also on your LAN: open it on a phone)
 npm test           # unit tests (model, history, import/export, layouts)
 npm run build      # static build in dist/
+npm run build:artifact  # claude.ai artifact bundle in dist-artifact/ (in-page exports, no service worker)
 npm run preview    # serve the build (service worker active)
 node scripts/smoke.mjs http://localhost:4173/ smoke-out   # end-to-end smoke test on a phone viewport
 ```

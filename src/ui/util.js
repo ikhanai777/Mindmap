@@ -51,9 +51,12 @@ export function hideToast() {
 }
 
 // ---------- prompt dialog ----------
-export function prompt(label, value = '', { placeholder = '', ok = 'OK' } = {}) {
+export function prompt(label, value = '', { placeholder = '', ok = 'OK', multiline = false, field = true } = {}) {
   return new Promise((resolve) => {
-    const bd = $('#dialog-backdrop'), form = $('#dialog'), input = $('#dialog-input');
+    const bd = $('#dialog-backdrop'), form = $('#dialog');
+    $('#dialog-input').hidden = multiline || !field;
+    $('#dialog-textarea').hidden = !multiline || !field;
+    const input = multiline ? $('#dialog-textarea') : $('#dialog-input');
     $('#dialog-label').textContent = label;
     $('#dialog-ok').textContent = ok;
     input.value = value;
@@ -65,6 +68,8 @@ export function prompt(label, value = '', { placeholder = '', ok = 'OK' } = {}) 
       form.onsubmit = null;
       $('#dialog-cancel').onclick = null;
       bd.onclick = null;
+      $('#dialog-input').hidden = false;
+      $('#dialog-textarea').hidden = true;
       resolve(v);
     };
     form.onsubmit = (e) => { e.preventDefault(); done(input.value.trim()); };
@@ -74,16 +79,15 @@ export function prompt(label, value = '', { placeholder = '', ok = 'OK' } = {}) 
 }
 
 export async function confirmDialog(label, ok = 'Delete') {
-  const input = $('#dialog-input');
-  input.hidden = true;
-  const res = await prompt(label, '', { ok });
-  input.hidden = false;
+  const res = await prompt(label, '', { ok, field: false });
   return res !== null;
 }
 
 // ---------- files ----------
 export async function download(filename, data, type) {
   const blob = data instanceof Blob ? data : new Blob([data], { type });
+  // sandboxed hosts (claude.ai artifacts) block downloads: show the file to copy or save instead
+  if (import.meta.env.MODE === 'artifact') return showExport(filename, blob, typeof data === 'string' ? data : null);
   // prefer the share sheet on phones that support sharing files
   try {
     const file = new File([blob], filename, { type: blob.type });
@@ -100,6 +104,34 @@ export async function download(filename, data, type) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+let exportUrl = null;
+/** In-page export: text files get a Copy button, images can be long-pressed / right-clicked to save. */
+export function showExport(filename, blob, text) {
+  const panel = $('#export-panel');
+  const body = $('#export-body');
+  if (exportUrl) URL.revokeObjectURL(exportUrl);
+  exportUrl = null;
+  $('#export-name').textContent = filename;
+  if (blob.type.startsWith('image/')) {
+    exportUrl = URL.createObjectURL(blob);
+    body.replaceChildren(
+      h('p.small.muted', 'Long-press (phone) or right-click (desktop) the image to save it.'),
+      h('img', { src: exportUrl, alt: 'Snapshot of the map', style: { width: '100%', borderRadius: '12px' } }));
+  } else {
+    const area = h('textarea.note', { id: 'export-text', readOnly: true, 'aria-label': filename, style: { minHeight: '40dvh' } });
+    area.value = text ?? '';
+    const copy = h('button.pill.primary', { id: 'export-copy', onclick: async () => {
+      try { await navigator.clipboard.writeText(area.value); toast('Copied ' + filename); }
+      catch { area.focus(); area.select(); toast('Selected — copy it with your keyboard or the Copy menu'); }
+    } }, 'Copy to clipboard');
+    const hint = filename.endsWith('.html')
+      ? 'Copy this into a file named ' + filename + ' and open it in any browser to orbit and walk the map.'
+      : 'Copy this and save it as ' + filename + ' to keep a backup or import it later.';
+    body.replaceChildren(h('p.small.muted', hint), area, h('div.row', copy));
+  }
+  panel.hidden = false;
 }
 
 export const slug = (s) => (String(s || 'map').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'map').slice(0, 60);

@@ -18,18 +18,18 @@
   --dock-bottom: calc(14px + var(--safe-bottom));
   color-scheme: dark;
 }
-:root[data-theme='aurora'] { --bg: #0e1024; --accent: #5eead4; --accent-ink: #032520; --glass: rgba(20, 20, 44, 0.72); --glass-strong: rgba(16, 16, 36, 0.95); --line: rgba(180, 160, 255, 0.16); }
-:root[data-theme='paper'] {
+:root[data-map-theme='aurora'] { --bg: #0e1024; --accent: #5eead4; --accent-ink: #032520; --glass: rgba(20, 20, 44, 0.72); --glass-strong: rgba(16, 16, 36, 0.95); --line: rgba(180, 160, 255, 0.16); }
+:root[data-map-theme='paper'] {
   --bg: #f1eee6; --fg: #1d2127; --muted: #6b6457; --accent: #0f766e; --accent-ink: #ffffff;
   --glass: rgba(255, 253, 247, 0.82); --glass-strong: rgba(255, 253, 247, 0.97); --line: rgba(60, 50, 30, 0.14);
   --shadow: 0 8px 30px rgba(60, 50, 30, 0.16); color-scheme: light;
 }
-:root[data-theme='contrast'] {
+:root[data-map-theme='contrast'] {
   --bg: #000; --fg: #fff; --muted: #d0d0d0; --accent: #ffff00; --accent-ink: #000;
   --glass: rgba(0, 0, 0, 0.92); --glass-strong: #000; --line: #fff; --shadow: none;
 }
-:root[data-theme='contrast'] button, :root[data-theme='contrast'] input, :root[data-theme='contrast'] textarea { outline-offset: 2px; }
-:root[data-theme='contrast'] .chrome, :root[data-theme='contrast'] .panel, :root[data-theme='contrast'] #sheet { border: 2px solid #fff !important; }
+:root[data-map-theme='contrast'] button, :root[data-map-theme='contrast'] input, :root[data-map-theme='contrast'] textarea { outline-offset: 2px; }
+:root[data-map-theme='contrast'] .chrome, :root[data-map-theme='contrast'] .panel, :root[data-map-theme='contrast'] #sheet { border: 2px solid #fff !important; }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
@@ -262,7 +262,7 @@ textarea.note { width: 100%; min-height: 180px; resize: vertical; background: tr
 
 #dialog-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; padding: 16px; }
 #dialog { width: min(420px, 100%); background: var(--glass-strong); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
-#dialog input { font-size: 1.05rem; background: var(--line); border: 0; border-radius: 12px; color: var(--fg); padding: 12px; outline: none; }
+#dialog input, #dialog textarea { font-size: 1.05rem; background: var(--line); border: 0; border-radius: 12px; color: var(--fg); padding: 12px; outline: none; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-actions button { border: 0; border-radius: 999px; min-height: 44px; padding: 0 18px; background: var(--line); }
 
@@ -310,3 +310,7 @@ textarea.note { width: 100%; min-height: 180px; resize: vertical; background: tr
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+
+#dialog textarea { min-height: 160px; resize: vertical; font: 0.95rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+#export-panel { z-index: 26; }
+#export-body { overflow-y: auto; padding: 8px 16px calc(20px + var(--safe-bottom)); display: flex; flex-direction: column; gap: 8px; }
