@@ -35,7 +35,9 @@ const shellFragment = /* glsl */ `
   uniform vec3 uColor; uniform float uTime; uniform float uGlow; uniform float uSeed; uniform float uBack;
   varying vec3 vN; varying vec3 vV; varying vec3 vP;
   void main() {
-    float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+    // clamp: rounding can push this a hair below 0, and pow() of a negative is
+    // NaN on some GPUs; bloom then smears the NaN into flickering black blocks
+    float f = clamp(1.0 - abs(dot(normalize(vN), normalize(vV))), 0.0, 1.0);
     float rim = pow(f, 2.6);
     float thin = smoothstep(0.82, 0.97, f) ; // bright edge line
     // wispy veins drifting over the glass
@@ -45,7 +47,7 @@ const shellFragment = /* glsl */ `
     vec3 col = uColor * (rim * 1.25 + thin * 0.9 + core) * uGlow;
     col += vec3(1.0) * thin * 0.25 * uGlow;
     float a = clamp(rim + core + thin, 0.0, 1.0);
-    gl_FragColor = vec4(col * (uBack > 0.5 ? 0.45 : 1.0), a);
+    gl_FragColor = vec4(clamp(col * (uBack > 0.5 ? 0.45 : 1.0), 0.0, 4.0), a);
   }`;
 
 const sparkMaterial = (uniforms) =>
@@ -62,8 +64,12 @@ const sparkMaterial = (uniforms) =>
         // brighter on the silhouette, like light caught on the glass rim
         vec3 n = normalize(normalMatrix * position);
         float edge = 1.0 - abs(dot(n, normalize(-mv.xyz)));
-        vA = pow(0.5 + 0.5 * sin(uTime * (1.5 + aSeed * 3.0) + aSeed * 60.0), 3.0) * (0.25 + edge);
-        gl_PointSize = uScale * (0.6 + aSeed) * 40.0 / -mv.z;
+        // slow, soft shimmer (fast twinkling reads as flicker)
+        vA = (0.35 + 0.35 * sin(uTime * (0.5 + aSeed) + aSeed * 60.0)) * (0.25 + clamp(edge, 0.0, 1.0));
+        float size = uScale * (0.6 + aSeed) * 40.0 / -mv.z;
+        // sub-pixel points pop in and out between frames: keep a minimum size and fade instead
+        vA *= clamp(size / 3.0, 0.0, 1.0);
+        gl_PointSize = max(size, 2.0);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
@@ -71,7 +77,7 @@ const sparkMaterial = (uniforms) =>
       void main() {
         float d = length(gl_PointCoord - 0.5);
         float s = smoothstep(0.5, 0.0, d);
-        gl_FragColor = vec4(mix(uColor, vec3(1.0), 0.6) * vA * s * 1.6, s * vA);
+        gl_FragColor = vec4(clamp(mix(uColor, vec3(1.0), 0.6) * vA * s * 1.3, 0.0, 2.0), clamp(s * vA, 0.0, 1.0));
       }`,
   });
 

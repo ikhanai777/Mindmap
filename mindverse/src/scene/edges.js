@@ -73,16 +73,16 @@ const fragmentShader = /* glsl */ `
   varying float vT; varying float vFacing; varying float vPhase; varying float vMain;
   void main() {
     vec3 col = mix(uColA, uColB, smoothstep(0.1, 0.9, vT));
-    float core = pow(vFacing, 1.4);
+    float core = pow(clamp(vFacing, 0.0, 1.0), 1.4);
     // travelling sparks, parent -> child
     float p = fract(vT * 1.6 - uTime * (0.35 + vPhase * 0.25) + vPhase);
-    float spark = smoothstep(0.92, 1.0, p) * 2.2;
+    float spark = smoothstep(0.8, 1.0, p) * 1.6;
     float p2 = fract(vT * 3.0 - uTime * 0.6 + vPhase * 3.0);
-    spark += smoothstep(0.97, 1.0, p2) * 1.2;
+    spark += smoothstep(0.9, 1.0, p2) * 0.8;
     float ends = smoothstep(0.0, 0.06, vT) * smoothstep(1.0, 0.94, vT);
     float base = mix(0.28, 0.5, vMain);
     vec3 c = col * (base + spark) * core * uGlow + vec3(1.0) * spark * core * 0.25 * uGlow;
-    gl_FragColor = vec4(c * ends, core * ends);
+    gl_FragColor = vec4(clamp(c * ends, 0.0, 4.0), clamp(core * ends, 0.0, 1.0));
   }`;
 
 export class EdgeView {

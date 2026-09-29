@@ -8,6 +8,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 
+const BLACK = new THREE.Color('#000000');
+const PROBE_BG = new THREE.Color('#0d0d0d');
+
 export function createWorld(container) {
   // no preserveDrawingBuffer: it causes black frames on some GPUs (PNG export
   // renders and reads back in the same task instead)
@@ -19,8 +22,7 @@ export function createWorld(container) {
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#03060f');
-  scene.fog = new THREE.FogExp2('#050a1a', 0.0065);
+  scene.background = BLACK;
 
   const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 2000);
   camera.position.set(0, 4, 46);
@@ -88,7 +90,7 @@ export function createWorld(container) {
     composer.setSize(w, h);
     composer.addPass(new RenderPass(scene, camera));
     // gentle, tight bloom: glow on the rims without smearing the whole frame
-    bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.7, 0.32, 0.28);
+    bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.7, 0.22, 0.28);
     if (!floatOK) {
       // bloom's own buffers default to half-float; use 8-bit where that isn't renderable
       for (const rt of [bloom.renderTargetBright, ...bloom.renderTargetsHorizontal, ...bloom.renderTargetsVertical]) {
@@ -101,7 +103,7 @@ export function createWorld(container) {
     if (!mode.samples) composer.addPass(new SMAAPass());
   }
 
-  // The sky is never pure black, so a frame whose sampled pixels are all
+  // With the probe background on, a frame whose sampled pixels are all
   // exactly 0 means the pipeline produced nothing (e.g. an MSAA resolve that
   // the driver accepted but didn't perform).
   const probe = new Uint8Array(4);
@@ -142,8 +144,13 @@ export function createWorld(container) {
   const labelScene = new THREE.Scene();
   function render() {
     if (composer) {
+      // verification frames use a barely-visible near-black background so a
+      // working pipeline never reads back as all-zero pixels
+      const checking = verified < 3;
+      if (checking) scene.background = PROBE_BG;
       composer.render();
-      if (verified < 3) {
+      if (checking) scene.background = BLACK;
+      if (checking) {
         verified++;
         const ok = framebufferOK(composer.renderTarget1) && framebufferOK(composer.renderTarget2) && canvasHasImage();
         if (!ok) {
@@ -231,6 +238,7 @@ function createBackdrop() {
         }`,
     }),
   );
+  sky.visible = false; // plain black by default; shown with the scenery
   group.add(sky);
 
   // --- starfield ---
@@ -259,15 +267,16 @@ function createBackdrop() {
         attribute float aSeed; varying float vA; uniform float uTime;
         void main() {
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          vA = 0.35 + 0.65 * (0.5 + 0.5 * sin(uTime * (0.6 + aSeed * 2.0) + aSeed * 40.0));
-          gl_PointSize = (1.0 + aSeed * 2.4);
+          // steady stars: twinkling reads as flicker
+          vA = 0.25 + 0.35 * aSeed;
+          gl_PointSize = 2.0 + aSeed * 1.5;
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
         varying float vA;
         void main() {
           float d = length(gl_PointCoord - 0.5);
-          gl_FragColor = vec4(vec3(0.7, 0.85, 1.0) * vA, smoothstep(0.5, 0.0, d));
+          gl_FragColor = vec4(vec3(0.7, 0.85, 1.0) * vA, smoothstep(0.5, 0.1, d));
         }`,
     }),
   );
@@ -305,7 +314,7 @@ function createBackdrop() {
           float pulse = smoothstep(0.96, 1.0, fract(dist / 40.0 - uTime * 0.12 + h * 0.3));
           vec3 col = mix(vec3(0.05, 0.35, 0.6), vec3(0.4, 0.15, 0.7), smoothstep(-200.0, 200.0, vW.x));
           float a = g * fade * (0.12 + pulse * 0.6);
-          gl_FragColor = vec4(col * (0.8 + pulse * 2.0), a);
+          gl_FragColor = vec4(clamp(col * (0.8 + pulse * 2.0), 0.0, 3.0), clamp(a, 0.0, 1.0));
         }`,
     }),
   );
@@ -405,6 +414,7 @@ function createBackdrop() {
       uniforms.uTime.value = t;
     },
     setVisible(v) {
+      sky.visible = v;
       floor.visible = v;
       skyline.visible = v;
       dust.visible = v;

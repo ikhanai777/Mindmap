@@ -21,7 +21,7 @@ To deploy it as a static site (Render, Netlify, Vercel, GitHub Pages), set the r
 
 | Area | What you get |
 |---|---|
-| **Look** | Fresnel glass bubbles with drifting inner veins and rim sparkles, colour‑coded per branch; each link is a bundle of twisting fibres with light pulses flowing from parent to child; bloom; a nebula sky, twinkling stars, drifting dust, a circuit floor with outward pulses, and a neon skyline. Labels are drawn after bloom, so text stays sharp. |
+| **Look** | Pure black space (city, grid floor and nebula are an optional "scenery" toggle). Fresnel glass bubbles with drifting inner veins and rim sparkles, colour‑coded per branch; each link is a bundle of twisting fibres with light pulses flowing from parent to child; bloom; a nebula sky, twinkling stars, drifting dust, a circuit floor with outward pulses, and a neon skyline. Labels are drawn after bloom, so text stays sharp. |
 | **Navigate** | Orbit, pan and zoom, with inertia. Fly‑to focus on any node, fit‑all, and auto‑rotate. Hovering or selecting a node lights the path back to the centre. |
 | **Build** | Tab adds a child and Enter adds a sibling. You name the new idea inline: Tab or Shift+Enter keeps going, Esc cancels. Double‑click a bubble to rename it. A quick‑action bar floats next to the selected bubble. |
 | **Edit** | Inspector panel with title, notes, glow colour (or inherit from the branch), collapse/expand (a badge shows the hidden count), arrange branch, focus and delete. |

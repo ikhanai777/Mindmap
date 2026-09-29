@@ -761,14 +761,14 @@ function toast(msg) {
 
 function loadPrefs() {
   try {
-    return { rotate: false, scenery: true, ...JSON.parse(localStorage.getItem('mindverse:prefs') || '{}') };
+    return { rotate: false, scenery: false, ...JSON.parse(localStorage.getItem('mindverse:prefs:v2') || '{}') };
   } catch {
-    return { rotate: false, scenery: true };
+    return { rotate: false, scenery: false };
   }
 }
 function savePrefs() {
   try {
-    localStorage.setItem('mindverse:prefs', JSON.stringify(prefs));
+    localStorage.setItem('mindverse:prefs:v2', JSON.stringify(prefs));
   } catch {
     /* storage unavailable */
   }
