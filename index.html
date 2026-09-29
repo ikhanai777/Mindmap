@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <title>Constellate</title>
+  <meta name="description" content="A mobile-first 3D mind map: ideas are glowing nodes in space you can orbit, fly through and walk around." />
+  <meta name="theme-color" content="#07080d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body data-mode="orbit">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="12" cy="18.5" r="1.3" /></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" /></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z" /></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></symbol>
+  </svg>
+
+  <canvas id="scene" aria-hidden="true"></canvas>
+
+  <a class="sr-only sr-focusable" href="#outline" id="sr-outline-link">Open outline (screen-reader view of the map)</a>
+
+  <!-- 1. top strip -->
+  <header id="topbar" class="chrome">
+    <nav id="crumbs" aria-label="Breadcrumb"></nav>
+    <button class="icon-btn" id="btn-search" aria-label="Search"><svg><use href="#i-search" /></svg></button>
+    <button class="icon-btn" id="btn-menu" aria-label="Map menu"><svg><use href="#i-menu" /></svg></button>
+  </header>
+  <div id="focus-chip" class="chip-bar chrome" hidden></div>
+  <div id="mode-banner" class="banner" hidden></div>
+
+  <!-- 3. minimap + recenter -->
+  <canvas id="minimap" class="chrome" width="128" height="128" aria-label="Minimap: tap to fly there" role="button"></canvas>
+  <button id="btn-recenter" class="icon-btn round chrome" aria-label="Recenter on root"><svg><use href="#i-target" /></svg></button>
+
+  <!-- virtual sticks (fly / walk) -->
+  <div id="stick-left" class="stick chrome" aria-hidden="true"><div class="knob"></div></div>
+  <div id="stick-right" class="stick chrome" aria-hidden="true"><div class="knob"></div></div>
+
+  <!-- 4. floating dock -->
+  <nav id="dock" class="chrome" aria-label="Main">
+    <div class="segmented" role="radiogroup" aria-label="Camera mode">
+      <button role="radio" data-mode="orbit" aria-checked="true">Orbit</button>
+      <button role="radio" data-mode="fly" aria-checked="false">Fly</button>
+      <button role="radio" data-mode="walk" aria-checked="false">Walk</button>
+    </div>
+    <button id="btn-add" class="fab" aria-label="Add idea (hold to dictate)"><svg><use href="#i-plus" /></svg></button>
+    <button id="btn-outline" class="icon-btn" aria-label="Outline mode" aria-pressed="false"><svg><use href="#i-list" /></svg></button>
+  </nav>
+
+  <!-- quick add -->
+  <div id="quick-add" hidden>
+    <div class="qa-path" id="qa-path"></div>
+    <input id="qa-input" type="text" enterkeyhint="next" autocomplete="off" autocapitalize="sentences" placeholder="Name this idea" aria-label="Idea title" />
+    <div class="qa-hint">Return = sibling · Tab or swipe → = indent · swipe ← = outdent</div>
+  </div>
+
+  <!-- multi-select bar -->
+  <div id="multi-bar" hidden>
+    <span id="multi-count">0 selected</span>
+    <button data-bulk="color">Color</button>
+    <button data-bulk="tag">Tag</button>
+    <button data-bulk="move">Move</button>
+    <button data-bulk="cluster">Cluster</button>
+    <button data-bulk="delete" class="danger">Delete</button>
+    <button data-bulk="done" class="primary">Done</button>
+  </div>
+
+  <!-- tour controls -->
+  <div id="tour-bar" hidden>
+    <button class="icon-btn" data-tour="prev" aria-label="Previous waypoint"><svg><use href="#i-prev" /></svg></button>
+    <span id="tour-label"></span>
+    <button class="icon-btn" data-tour="next" aria-label="Next waypoint"><svg><use href="#i-next" /></svg></button>
+    <button class="icon-btn" data-tour="stop" aria-label="Stop tour"><svg><use href="#i-close" /></svg></button>
+  </div>
+
+  <!-- 5. bottom sheet -->
+  <section id="sheet" aria-label="Idea details" data-state="hidden">
+    <div class="sheet-handle" id="sheet-handle" role="button" aria-label="Expand or collapse details"><span></span></div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </section>
+
+  <!-- panels -->
+  <section id="outline" class="panel" hidden aria-label="Outline">
+    <header class="panel-head">
+      <strong>Outline</strong>
+      <span class="muted small">Enter = new · Tab = indent · ⇧Tab = outdent</span>
+      <button class="icon-btn" data-close aria-label="Close outline"><svg><use href="#i-close" /></svg></button>
+    </header>
+    <div id="outline-list" role="tree" aria-label="Map outline"></div>
+  </section>
+
+  <section id="search" class="panel top" hidden aria-label="Search">
+    <div class="search-row">
+      <input id="search-input" type="search" placeholder="Search titles, notes, tags" autocomplete="off" aria-label="Search" />
+      <button class="icon-btn" data-close aria-label="Close search"><svg><use href="#i-close" /></svg></button>
+    </div>
+    <div id="search-filters" class="filters"></div>
+    <ul id="search-results" role="listbox" aria-label="Results"></ul>
+  </section>
+
+  <section id="menu" class="panel side" hidden aria-label="Map menu">
+    <header class="panel-head">
+      <strong>Map</strong>
+      <button class="icon-btn" data-close aria-label="Close menu"><svg><use href="#i-close" /></svg></button>
+    </header>
+    <div id="menu-body"></div>
+  </section>
+
+  <!-- radial menu, popovers, dialogs, toasts -->
+  <div id="radial" hidden role="menu" aria-label="Idea actions"></div>
+  <div id="popover" hidden></div>
+  <div id="dialog-backdrop" hidden>
+    <form id="dialog" method="dialog">
+      <label id="dialog-label" for="dialog-input"></label>
+      <input id="dialog-input" autocomplete="off" />
+      <div class="dialog-actions">
+        <button type="button" id="dialog-cancel">Cancel</button>
+        <button type="submit" id="dialog-ok" class="primary">OK</button>
+      </div>
+    </form>
+  </div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <div id="coach" hidden></div>
+  <input id="file-input" type="file" accept=".json,.md,.markdown,.txt,.opml,.xml,application/json,text/markdown,text/plain,text/x-opml" hidden />
+
+  <noscript>Constellate needs JavaScript and WebGL.</noscript>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
