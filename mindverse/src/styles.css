@@ -201,7 +201,11 @@ button { font: inherit; color: inherit; }
   .search { order: 3; flex: 1 1 100%; max-width: none; margin: 0; }
   .toolbar { order: 2; overflow-x: auto; max-width: 100%; }
   .statusbar .hint { display: none; }
-  .inspector { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 48vh; }
+  .inspector { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 44vh; gap: 10px; padding: 12px; }
+  .inspector textarea { min-height: 0; }
+  #insp-note { height: 3.4em; }
+  /* the sheet carries the same actions, so the floating bar and status line step aside */
+  body.inspecting .quick, body.inspecting .statusbar { display: none !important; }
 }
 @media (max-width: 520px) {
   .brand-name { display: none; }

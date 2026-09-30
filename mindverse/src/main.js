@@ -430,6 +430,7 @@ $('#insp-close').addEventListener('click', () => select(null));
 function refreshInspector() {
   const n = selectedId && map.nodes[selectedId];
   insp.el.hidden = !n;
+  document.body.classList.toggle('inspecting', !!n);
   if (!n) return;
   const color = colorOf(map, n.id);
   if (document.activeElement !== insp.title) insp.title.value = n.title;
@@ -529,7 +530,22 @@ document.addEventListener('pointerdown', (e) => {
 });
 
 const slug = () => (map.title || 'mindverse').replace(/[^\w\-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'mindverse';
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
 function download(name, data, type) {
+  // Android app: the WebView can't save browser downloads, so hand the file
+  // to the native side, which writes it to Downloads
+  if (window.MindverseAndroid) {
+    const base64 = typeof data === 'string' && data.startsWith('data:')
+      ? data.slice(data.indexOf(',') + 1)
+      : bytesToBase64(new TextEncoder().encode(data));
+    window.MindverseAndroid.saveFile(name, base64, type);
+    return;
+  }
   const url = typeof data === 'string' && data.startsWith('data:') ? data : URL.createObjectURL(new Blob([data], { type }));
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   document.body.append(a);
@@ -555,7 +571,8 @@ exportMenu.addEventListener('click', async (e) => {
     download(`${slug()}.md`, toOutline(map), 'text/markdown');
   } else if (kind === 'copy') {
     try {
-      await navigator.clipboard.writeText(toOutline(map));
+      if (window.MindverseAndroid) window.MindverseAndroid.copyText(toOutline(map));
+      else await navigator.clipboard.writeText(toOutline(map));
       toast('Outline copied');
     } catch {
       toast('Clipboard unavailable — use the .md export');
@@ -787,6 +804,17 @@ document.fonts?.ready.then(() => mind.redrawLabels());
 
 // debug / automation hook
 window.mindverse = { get map() { return map; }, actions, select, mind, world };
+
+// Android Back button: close whatever is open, one layer at a time.
+// Returns false when there is nothing left to close, so the app can exit.
+window.mindverseBack = () => {
+  if (!$('#modal').hidden) return closeModal(), true;
+  if (!exportMenu.hidden) return closePopovers(), true;
+  if (renaming) return finishRename(true), true;
+  if (searchInput.value || document.activeElement === searchInput) return clearSearch(true), true;
+  if (selectedId) return select(null), true;
+  return false;
+};
 
 function frame() {
   mind.update();

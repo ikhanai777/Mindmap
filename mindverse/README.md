@@ -46,3 +46,28 @@ src/scene/edges.js      GPU bezier fibre bundles with flowing light
 src/scene/mindscene.js  model→view sync, picking, fly‑to, subtree dragging
 src/main.js             UI wiring: pointer, keyboard, inspector, search, modals
 ```
+
+## Android app (APK)
+
+A ready-to-install build is committed at `android/release/mindverse.apk`. To install it:
+
+1. Copy the APK to your phone, or open it from GitHub on the phone.
+2. Open it, and allow your browser or file manager to "install unknown apps" when Android asks.
+3. Launch Mindverse from the app drawer.
+
+The app is a thin native shell (`android/src/.../MainActivity.java`) that runs the same single-file web build in a full-screen WebView. Maps are saved on the device. The shell also adds:
+
+- Exports (PNG, JSON, Markdown) save to **Downloads/Mindverse**.
+- Import opens the system file picker.
+- "Copy outline" uses the Android clipboard.
+- Back closes dialogs and clears the selection before it exits the app.
+
+To rebuild after changing the web app:
+
+```bash
+# one-time: Android SDK command-line tools, then
+sdkmanager "build-tools;35.0.0" "platforms;android-35"
+ANDROID_HOME=/path/to/sdk android/build-apk.sh   # → android/build/mindverse.apk
+```
+
+The build script uses the SDK build tools directly (aapt2, javac, d8, zipalign, apksigner), so Gradle isn't needed. It signs the APK with `android/mindverse.keystore` (password `mindverse`). Android only installs an update over an existing install when the update is signed with the same key, so keep that file. With a different key you would have to uninstall first, and uninstalling deletes the maps saved on the phone. Before publishing anywhere, pass your own key with `MINDVERSE_KEYSTORE` and `MINDVERSE_KEYSTORE_PASS`.
